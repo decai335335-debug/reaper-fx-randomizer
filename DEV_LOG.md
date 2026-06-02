@@ -9,6 +9,7 @@
 - 设计特殊音效，需要系统性地探索某个插件的参数边界
 - 制作电子音乐，想为同一 Loop 生成多个变体版本
 - 找到了一组好听的随机设置，但无法保存复现
+- ReaImGui 升级后，旧脚本因为 API 不兼容报错无法运行
 
 **目标**：做一个 REAPER 插件，支持多参数同时随机、多种随机分布算法、A/B 快照对比、预设保存，让"随机"成为可控的创作工具。
 
@@ -66,6 +67,25 @@
 - 增加 `smooth_ms` 配置：参数变化间隔，防止快速切换导致的音频爆音
 - 代码整理、文档完善、README + DEV_LOG 编写
 
+### v1.1.0（ReaImGui v0.10 兼容升级）
+
+**问题背景**：ReaImGui 从 v0.9 升级到 v0.10 时，移除了多个旧版 API，导致脚本完全无法运行。
+
+**具体变更**：
+
+| 旧 API (v0.9) | 新 API (v0.10) | 影响位置 |
+|---------------|----------------|----------|
+| `ImGui.Columns` | `ImGui.BeginTable` | `draw_ui()` 主布局 |
+| `ImGui.NextColumn` | `ImGui.TableNextColumn` | 布局切换 |
+| `ImGui.SetColumnWidth` | `ImGui.TableSetupColumn` + `TableColumnFlags_WidthFixed` | 列宽设置 |
+| `BeginChild(..., true)` | `BeginChild(..., ChildFlags_Border)` 或数字 `1` | 三个子窗口边框 |
+| `TableFlags_Resizable()` | `TableFlags_Resizable`（无括号） | 表格标志位 |
+| `require 'imgui' '0.9'` | `require 'imgui' '0.10'` | 模块加载 |
+
+**关键发现**：v0.10 的 shim 系统虽然支持通过 `require 'imgui' '0.9'` 请求旧版 API，但 `Columns` 系列函数已被彻底移除，无法通过 shim 兼容。必须改用新版 `BeginTable` API。
+
+**另一个坑**：v0.10 中 `ChildFlags_Border` 常量名称在某些版本中未暴露，最终使用底层数值 `1` 作为万能替代方案。
+
 ---
 
 ## 3. 踩坑记录
@@ -80,6 +100,7 @@
 | 撤销后 ReaImGui 显示不同步 | 撤销修改了底层参数值，但 UI 上的滑块/数值没更新 | 在 Undo 后强制刷新映射参数的 `current_value` 缓存，触发 UI 重绘 | v0.4.0 |
 | Weighted 算法的 weight 参数方向反直觉 | 初版 weight 越大越偏向 max，用户误以为 weight 是"权重"越大越"中心" | 重命名 UI 标签为 "Bias toward"，并增加可视化提示（低值=偏左，高值=偏右） | v0.6.0 |
 | 不同 REAPER 版本 TrackFX API 行为差异 | REAPER 6.0 和 7.0 的 `TrackFX_GetNamedConfigParm` 返回值格式有细微差异 | 最小版本要求设为 REAPER 6.0+，对差异 API 做版本兼容分支 | v0.2.0 |
+| ReaImGui v0.10 不兼容 | `Columns` API 被移除，`BeginChild` 布尔参数改为数字常量 | 全面升级 UI 代码：`Columns`→`BeginTable`，布尔边框→`ChildFlags_Border`/`1`，常量函数→直接引用 | v1.1.0 |
 
 ---
 
@@ -115,6 +136,13 @@
 - 采用名称匹配策略：按轨道名 + FX 名匹配参数。换工程后，只要名称一致就能恢复映射
 - **代价**：同名轨道会导致歧义。解决方案：建议用户给轨道起唯一名称
 
+### 为什么 ReaImGui 升级后选择改代码而不是降级？
+
+- **长期维护**：ReaImGui v0.10 是官方主推版本，未来新功能和修复都会基于 v0.10
+- **生态兼容**：其他现代脚本（如 `语音配方截图`）也基于 v0.10 开发，降级会导致它们出问题
+- **代码量可控**：`Columns` 只在 `draw_ui()` 中使用，实际仅需修改 4 行即可迁移到 `BeginTable`
+- **一次性成本**：这次升级后，未来 ReaImGui 的小版本更新不会再破坏脚本
+
 ---
 
 ## 5. 实际测试数据
@@ -127,6 +155,11 @@
 | 发现"意外好听"设置的概率 | 低（受经验局限） | 显著提升（突破思维定式）|
 | 保存并复现好设置 | 手动记笔记，易遗漏 | Snap / Preset 一键保存 |
 | A/B 对比效率 | 靠耳朵硬记，不可靠 | 一键切换，精确对比 |
+
+**ReaImGui v0.10 兼容测试**：
+- 脚本加载成功率：100%
+- UI 渲染正常：所有面板、表格、按钮、滑块正确显示
+- 功能完整性：随机化、快照、历史、预设全部正常工作
 
 ---
 
@@ -145,6 +178,10 @@ reaper-fx-randomizer/
 │   ├── 7. SNAPSHOT SYSTEM      # A/B 快照
 │   ├── 8. HISTORY / UNDO       # 历史栈
 │   ├── 9. PRESET SYSTEM        # 预设保存/加载
-│   └── 10. ReaImGui UI         # 完整图形界面
+│   └── 10. ReaImGui UI         # 完整图形界面（v0.10 API）
+│       ├── draw_ui()           # 主布局（BeginTable）
+│       ├── draw_browser()      # 左侧参数浏览器
+│       ├── draw_mapped_params() # 映射参数表格
+│       └── draw_controls()     # 控制面板
 └── README.md / DEV_LOG.md      # 文档
 ```

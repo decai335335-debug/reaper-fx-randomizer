@@ -12,6 +12,7 @@
 - 想尝试更大胆的参数搭配，但手动逐个调整效率太低，热情很快被磨光
 - 随机出了一组好听的设置，但没法保存，下次打开工程又得重新调
 - 想对比 A/B 两种参数组合，只能手动记笔记或靠耳朵硬记
+- ReaImGui 升级后，旧脚本因为 API 不兼容直接报错无法运行
 
 **现在是这样的：**
 
@@ -19,6 +20,7 @@
 - 4 种随机算法（均匀/正态/加权/阶梯），从细微变化到彻底颠覆都可控制
 - 随机出好听的组合？按 Snap A 保存，继续随机，随时 A/B 对比
 - 整组随机配置可以保存为预设，换工程也能一键调用
+- 已适配 ReaImGui v0.10，安装即用
 
 **适合谁用：**
 
@@ -50,13 +52,15 @@
 ### 依赖要求
 
 - **REAPER 6.0+**
-- **ReaImGui 扩展**（UI 核心依赖）
+- **ReaImGui 扩展 v0.10+**（UI 核心依赖）
 
 **安装 ReaImGui**：
 1. 访问 [reapack.com](https://reapack.com) 下载安装 ReaPack
 2. 在 REAPER 中点击 `Extensions → ReaPack → Import repositories`
 3. 导入 ReaTeam 仓库，搜索并安装 **ReaImGui**
 4. 重启 REAPER
+
+> 如果 ReaPack 连不上 GitHub，可以手动下载 `reaper_imgui-x64.dll` 放到 `%APPDATA%\REAPER\UserPlugins\`，并下载 `imgui.lua` 放到 `Scripts/ReaTeam Extensions/API/`。
 
 ### 安装步骤
 
@@ -126,7 +130,7 @@
 | 层级 | 技术 |
 |------|------|
 | 脚本语言 | ReaScript (Lua) |
-| UI 框架 | ReaImGui (`imgui` '0.9') |
+| UI 框架 | ReaImGui (`imgui` v0.10) |
 | FX 操作 | REAPER TrackFX API (`TrackFX_GetParam`, `TrackFX_SetParam`) |
 | 随机算法 | 纯 Lua 数学实现（Uniform、Box-Muller Normal、Power Curve Weighted、Stepped） |
 | 持久化 | REAPER ExtState (`reaper.GetExtState` / `SetExtState`) |
@@ -145,7 +149,7 @@ reaper-fx-randomizer/
 │   ├── 随机算法引擎        # Uniform / Normal / Weighted / Stepped
 │   ├── 快照系统            # A/B 状态保存与恢复
 │   ├── 预设系统            # 配置序列化与反序列化
-│   └── ReaImGui UI         # 完整图形界面
+│   └── ReaImGui UI         # 完整图形界面（适配 v0.10 API）
 └── README.md / DEV_LOG.md  # 文档
 ```
 
@@ -155,6 +159,12 @@ reaper-fx-randomizer/
 
 **Q: 运行脚本提示 "This script requires the ReaImGui extension"？**
 A: 未安装 ReaImGui 扩展。按上方"安装 ReaImGui"步骤操作，安装后重启 REAPER。
+
+**Q: 报错 `attempt to access a nil value (field 'Columns')`？**
+A: 你用的是 ReaImGui v0.10+，但脚本旧版使用了已移除的 `Columns` API。请更新到本仓库最新版脚本，已改用 `BeginTable` 实现。
+
+**Q: 报错 `attempt to call a number value`？**
+A: 同样是因为 ReaImGui v0.10 中标志位（如 `TableFlags_Resizable`）从函数变成了数字常量，不能加 `()` 调用。最新版脚本已修复。
 
 **Q: 随机结果无法复现？**
 A: 检查 **Random Seed** 设置。Seed = 0 时每次结果都不同；设为固定数字（如 42）即可复现完全相同的随机序列。
@@ -174,6 +184,14 @@ A: 参数映射按轨道名和 FX 名匹配。如果新工程中轨道名或 FX 
 ---
 
 ## 更新日志
+
+### v1.1.0（2026-06-03）
+
+- **ReaImGui v0.10 兼容**：
+  - `ImGui.Columns` → `ImGui.BeginTable`
+  - `BeginChild` 布尔边框 → `ChildFlags_Border` 数字常量
+  - 标志位函数调用 `()` → 直接引用数字常量
+  - `require 'imgui' '0.9'` → `require 'imgui' '0.10'`
 
 ### v1.0.0（初始版本）
 
