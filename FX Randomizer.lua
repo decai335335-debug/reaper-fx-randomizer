@@ -427,53 +427,52 @@ end
 -- 7. RANDOMIZATION ENGINE
 --------------------------------------------------------------------------------
 local function do_randomize()
-  if #STATE.mapped_params == 0 then return end
-  
-  -- Set seed
-  if CONFIG.seed and CONFIG.seed ~= 0 then
-    math.randomseed(CONFIG.seed)
-  else
-    math.randomseed(os.time())
-  end
-  
-  -- Push undo block
-  reaper.Undo_BeginBlock()
-  
-  -- Collect previous values for history
-  local prev_values = {}
-  
-  for _, mp in ipairs(STATE.mapped_params) do
-    local tr_idx, fx_idx, param_idx = parse_uid(mp.uid)
-    local tr = nil
-    if tr_idx == 0 then
-      tr = reaper.GetMasterTrack(0)
+  if not STATE.mapped_params or #STATE.mapped_params == 0 then return end
+
+  -- 1. 安全设置随机种子
+  pcall(function()
+    if CONFIG.seed and CONFIG.seed ~= 0 then
+      math.randomseed(CONFIG.seed)
     else
-      tr = reaper.GetTrack(0, tr_idx - 1)
+      math.randomseed(math.floor(reaper.time_precise() * 1000))
     end
+  end)
+
+  reaper.Undo_BeginBlock()
+  local prev_values = {}
+
+  -- 2. 遍历参数并安全计算
+  for _, mp in ipairs(STATE.mapped_params) do
+    if not mp or not mp.uid then goto next_param end
+    local tr_idx, fx_idx, param_idx = parse_uid(mp.uid)
+    if not tr_idx or not fx_idx or not param_idx then goto next_param end
+
+    local tr = (tr_idx == 0) and reaper.GetMasterTrack(0) or reaper.GetTrack(0, tr_idx - 1)
     if not tr then goto next_param end
-    
-    -- Get current value for history
-    prev_values[mp.uid] = reaper.TrackFX_GetParamNormalized(tr, fx_idx, param_idx)
-    
-    -- Determine new value
-    local new_val
+
+    local current_val = reaper.TrackFX_GetParamNormalized(tr, fx_idx, param_idx) or 0
+    prev_values[mp.uid] = current_val
+
+    local new_val = current_val
     if mp.is_toggle then
       new_val = math.random() < 0.5 and 0 or 1
     else
-      local algo = ALGORITHMS[mp.algo] or ALGORITHMS.uniform
-      new_val = algo.func(mp.rand_min, mp.rand_max, mp.weight)
+      local algo_key = mp.algo or 'uniform'
+      local algo = ALGORITHMS[algo_key] or ALGORITHMS.uniform
+      local r_min, r_max, weight = mp.rand_min or 0, mp.rand_max or 1, mp.weight or 0.5
       
-      -- Apply global amount: blend between current and random
-      local current_val = prev_values[mp.uid]
-      new_val = current_val + (new_val - current_val) * STATE.rand_amount
-      
-      -- Check exclude ranges
+      -- 安全调用算法函数
+      local res_ok, res = pcall(algo.func, r_min, r_max, weight)
+      if res_ok and type(res) == 'number' then
+        new_val = res
+      end
+
+      local rand_amount = STATE.rand_amount or 1.0
+      new_val = current_val + (new_val - current_val) * rand_amount
+
       for _, range in ipairs(mp.exclude_ranges or {}) do
-        if new_val >= range.min and new_val <= range.max then
-          -- Push to nearest boundary
-          local dist_to_min = math.abs(new_val - range.min)
-          local dist_to_max = math.abs(new_val - range.max)
-          if dist_to_min < dist_to_max then
+        if range.min and range.max and new_val >= range.min and new_val <= range.max then
+          if math.abs(new_val - range.min) < math.abs(new_val - range.max) then
             new_val = range.min - 0.001
           else
             new_val = range.max + 0.001
@@ -481,20 +480,26 @@ local function do_randomize()
         end
       end
     end
-    
-    new_val = clamp(new_val, 0, 1)
-    reaper.TrackFX_SetParamNormalized(tr, fx_idx, param_idx, new_val)
-    
+
+    reaper.TrackFX_SetParamNormalized(tr, fx_idx, param_idx, clamp(new_val, 0, 1))
     ::next_param::
   end
-  
+
   reaper.Undo_EndBlock('FX Randomizer: Randomize parameters', -1)
   reaper.UpdateArrange()
-  
-  -- Push to history
-  push_history(prev_values)
-  
-  -- Rescan to update current values display
+
+  -- 3. 安全保存历史记录 (使用扁平拷贝代替容易崩溃的 deep_copy)
+  local flat_copy = {}
+  for k, v in pairs(prev_values) do flat_copy[k] = v end
+
+  while #STATE.history > STATE.history_idx do table.remove(STATE.history) end
+  STATE.history_idx = STATE.history_idx + 1
+  STATE.history[STATE.history_idx] = { time = os.time(), values = flat_copy }
+  if #STATE.history > 50 then
+    table.remove(STATE.history, 1)
+    STATE.history_idx = STATE.history_idx - 1
+  end
+
   STATE.need_rescan = true
 end
 
@@ -963,7 +968,10 @@ local function draw_controls()
   local btn_w = avail_w - 16
   local btn_h = 45
   if ImGui.Button(ctx, 'RANDOMIZE!##bigbtn', btn_w, btn_h) then
-    do_randomize()
+    local ok, err = pcall(do_randomize)
+    if not ok then
+      reaper.ShowConsoleMsg("Randomize Crash Error:\n" .. tostring(err) .. "\n")
+    end
   end
   ImGui.PopStyleColor(ctx, 3)
   
