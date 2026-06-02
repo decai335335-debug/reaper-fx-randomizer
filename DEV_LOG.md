@@ -86,6 +86,24 @@
 
 **另一个坑**：v0.10 中 `ChildFlags_Border` 常量名称在某些版本中未暴露，最终使用底层数值 `1` 作为万能替代方案。
 
+### v1.1.1（随机化崩溃修复）
+
+**问题背景**：用户点击 `RANDOMIZE!` 按钮后，ReaImGui 报错 `Missing EndChild()`，整个 UI 崩溃无法继续。
+
+**根因分析**：
+- `do_randomize()` 函数在遍历参数时，某些 `mp` 对象或 `mp.uid` 为 nil，导致 `parse_uid()` 返回 nil，后续代码直接崩溃
+- `math.randomseed(os.time())` 在极端情况下可能引发问题
+- `push_history(prev_values)` 内部使用 `deep_copy(prev_values)`，而 `deep_copy` 使用 `next` 递归迭代，在 REAPER Lua 5.4 环境下处理简单字典表时偶发崩溃
+- 由于崩溃发生在 `ImGui.BeginChild` 和 `ImGui.EndChild` 之间，ReaImGui 检测到结构不完整，抛出 `Missing EndChild()`
+
+**修复方案**：
+- `do_randomize()` 入口处增加 `not STATE.mapped_params` 检查
+- 每个参数处理前检查 `mp` 和 `mp.uid` 是否存在
+- `parse_uid` 返回值逐一校验
+- 算法调用用 `pcall` 包裹
+- 历史记录不再调用 `push_history`，改为内联扁平拷贝（`for k,v in pairs(prev_values)`）
+- `RANDOMIZE!` 按钮用 `pcall(do_randomize)` 包裹，即使内部崩溃也不会破坏 UI 状态
+
 ---
 
 ## 3. 踩坑记录
@@ -101,6 +119,7 @@
 | Weighted 算法的 weight 参数方向反直觉 | 初版 weight 越大越偏向 max，用户误以为 weight 是"权重"越大越"中心" | 重命名 UI 标签为 "Bias toward"，并增加可视化提示（低值=偏左，高值=偏右） | v0.6.0 |
 | 不同 REAPER 版本 TrackFX API 行为差异 | REAPER 6.0 和 7.0 的 `TrackFX_GetNamedConfigParm` 返回值格式有细微差异 | 最小版本要求设为 REAPER 6.0+，对差异 API 做版本兼容分支 | v0.2.0 |
 | ReaImGui v0.10 不兼容 | `Columns` API 被移除，`BeginChild` 布尔参数改为数字常量 | 全面升级 UI 代码：`Columns`→`BeginTable`，布尔边框→`ChildFlags_Border`/`1`，常量函数→直接引用 | v1.1.0 |
+| 点击 RANDOMIZE! 后 UI 崩溃 | `do_randomize()` 中遇到 nil 参数、`deep_copy` 递归崩溃，导致 `EndChild` 未执行 | `pcall` 包裹随机化逻辑、nil 安全检查、扁平拷贝替代 `deep_copy`、按钮级错误拦截 | v1.1.1 |
 
 ---
 
