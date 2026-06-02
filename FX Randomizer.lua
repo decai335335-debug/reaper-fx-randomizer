@@ -20,7 +20,7 @@ if not reaper.ImGui_GetBuiltinPath then
 end
 
 package.path = reaper.ImGui_GetBuiltinPath() .. '/?.lua'
-local ImGui = require 'imgui' '0.9'
+local ImGui = require 'imgui' '0.10'
 
 --------------------------------------------------------------------------------
 -- 1. CONFIGURATION & STATE
@@ -1075,19 +1075,22 @@ local function draw_ui()
     -- Main layout: left browser | right panel
     local _, avail_h = ImGui.GetContentRegionAvail(ctx)
     
-    ImGui.Columns(ctx, 2, 'MainLayout', false)
-    ImGui.SetColumnWidth(ctx, 0, 240)
-    
-    -- Left column: Browser
-    draw_browser()
-    
-    ImGui.NextColumn(ctx)
-    
-    -- Right column: Mapped params + Controls
-    draw_mapped_params()
-    draw_controls()
-    
-    ImGui.Columns(ctx, 1, 'MainLayout', false)
+    if ImGui.BeginTable(ctx, 'MainLayout', 2, ImGui.TableFlags_Resizable()) then
+      ImGui.TableSetupColumn(ctx, 'Browser', ImGui.TableColumnFlags_WidthFixed(), 240)
+      ImGui.TableSetupColumn(ctx, 'Controls', ImGui.TableColumnFlags_WidthStretch())
+      ImGui.TableNextRow(ctx)
+      
+      -- Left column: Browser
+      ImGui.TableNextColumn(ctx)
+      draw_browser()
+      
+      -- Right column: Mapped params + Controls
+      ImGui.TableNextColumn(ctx)
+      draw_mapped_params()
+      draw_controls()
+      
+      ImGui.EndTable(ctx)
+    end
     
     ImGui.End(ctx)
   end
