@@ -734,7 +734,7 @@ end
 -- Draw the parameter browser (left panel)
 local function draw_browser()
   local _, avail_h = ImGui.GetContentRegionAvail(ctx)
-  ImGui.BeginChild(ctx, 'Browser', 220, avail_h, ImGui.ChildFlags_Border)
+  ImGui.BeginChild(ctx, 'Browser', 220, avail_h, 1)
   
   ImGui.Text(ctx, 'Parameter Browser')
   ImGui.Separator(ctx)
@@ -823,7 +823,7 @@ local function draw_mapped_params()
     clear_all_mapped_params()
   end
   
-  ImGui.BeginChild(ctx, 'MappedParams', -1, table_height, ImGui.ChildFlags_Border)
+  ImGui.BeginChild(ctx, 'MappedParams', -1, table_height, 1)
   
   if #STATE.mapped_params == 0 then
     ImGui.TextDisabled(ctx, 'No parameters mapped. Select parameters from the browser on the left.')
@@ -905,7 +905,7 @@ end
 local function draw_controls()
   local avail_w = ImGui.GetContentRegionAvail(ctx)
   
-  ImGui.BeginChild(ctx, 'Controls', -1, -1, ImGui.ChildFlags_Border)
+  ImGui.BeginChild(ctx, 'Controls', -1, -1, 1)
   
   -- Randomize section
   ImGui.Text(ctx, 'Randomization Controls')
