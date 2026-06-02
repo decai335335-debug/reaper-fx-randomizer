@@ -1075,9 +1075,9 @@ local function draw_ui()
     -- Main layout: left browser | right panel
     local _, avail_h = ImGui.GetContentRegionAvail(ctx)
     
-    if ImGui.BeginTable(ctx, 'MainLayout', 2, ImGui.TableFlags_Resizable()) then
-      ImGui.TableSetupColumn(ctx, 'Browser', ImGui.TableColumnFlags_WidthFixed(), 240)
-      ImGui.TableSetupColumn(ctx, 'Controls', ImGui.TableColumnFlags_WidthStretch())
+    if ImGui.BeginTable(ctx, 'MainLayout', 2, ImGui.TableFlags_Resizable) then
+      ImGui.TableSetupColumn(ctx, 'Browser', ImGui.TableColumnFlags_WidthFixed, 240)
+      ImGui.TableSetupColumn(ctx, 'Controls', ImGui.TableColumnFlags_WidthStretch)
       ImGui.TableNextRow(ctx)
       
       -- Left column: Browser
